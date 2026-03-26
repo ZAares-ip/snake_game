@@ -1,0 +1,665 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>貪食蛇 64x64</title>
+  <style>
+    :root{
+      --panel-bg: rgba(10, 12, 20, 0.55);
+      --panel-border: rgba(255, 255, 255, 0.14);
+      --text: rgba(255,255,255,0.92);
+      --muted: rgba(255,255,255,0.7);
+      --accent: #7cf7c8;
+    }
+
+    html, body {
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans TC", "PingFang TC", sans-serif;
+      background: #05070d;
+      color: var(--text);
+    }
+
+    #particles {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    .wrap{
+      position: relative;
+      z-index: 1;
+      height: 100%;
+      display: grid;
+      place-items: center;
+      padding: 18px;
+      box-sizing: border-box;
+    }
+
+    .game-panel{
+      display: grid;
+      grid-template-rows: auto 1fr;
+      gap: 10px;
+      padding: 12px;
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 16px;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 20px 80px rgba(0,0,0,0.5);
+    }
+
+    .hud{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 0 6px;
+      color: var(--muted);
+      font-size: 14px;
+      user-select: none;
+    }
+
+    .hud strong{
+      color: var(--text);
+      font-weight: 700;
+    }
+
+    #game{
+      display: block;
+      background: rgba(0,0,0,0.25);
+      border-radius: 12px;
+      image-rendering: pixelated;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08);
+    }
+
+    .overlay{
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 160ms ease;
+    }
+    .overlay.show{
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .overlay-card{
+      width: min(420px, 92vw);
+      padding: 18px 16px;
+      background: rgba(10, 12, 20, 0.75);
+      border: 1px solid rgba(255,255,255,0.16);
+      border-radius: 16px;
+      text-align: center;
+      box-shadow: 0 30px 120px rgba(0,0,0,0.65);
+    }
+    .overlay-card h1{
+      margin: 6px 0 8px;
+      font-size: 20px;
+      letter-spacing: 0.5px;
+    }
+    .overlay-card .sub{
+      color: var(--muted);
+      font-size: 14px;
+      margin-bottom: 14px;
+      line-height: 1.5;
+    }
+    .metrics{
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+      margin: 10px 0 14px;
+      color: var(--text);
+      font-size: 16px;
+    }
+    .metric{
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 12px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      text-align: left;
+    }
+    .btn-row{
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      margin-top: 8px;
+    }
+    button{
+      appearance: none;
+      border: 1px solid rgba(255,255,255,0.18);
+      background: rgba(255,255,255,0.08);
+      color: var(--text);
+      border-radius: 12px;
+      padding: 10px 14px;
+      cursor: pointer;
+      font-weight: 700;
+    }
+    button.primary{
+      border-color: rgba(124, 247, 200, 0.35);
+      background: rgba(124, 247, 200, 0.15);
+      box-shadow: 0 0 0 3px rgba(124, 247, 200, 0.10);
+    }
+    button:active{
+      transform: translateY(1px);
+    }
+
+    .help{
+      color: var(--muted);
+      font-size: 12.5px;
+      padding: 8px 6px 0;
+      user-select: none;
+    }
+    kbd{
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      background: rgba(255,255,255,0.10);
+      border: 1px solid rgba(255,255,255,0.14);
+      border-bottom-color: rgba(255,255,255,0.22);
+      padding: 2px 6px;
+      border-radius: 8px;
+      color: rgba(255,255,255,0.9);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="particles"></canvas>
+  <div class="wrap">
+    <div class="game-panel" style="position: relative;">
+      <div class="hud">
+        <div>速度等級：<strong id="level">1</strong></div>
+        <div>得分(吃到食物)：<strong id="score">0</strong></div>
+      </div>
+      <div style="position: relative; display: grid; place-items: center;">
+        <canvas id="game" width="640" height="640" aria-label="貪食蛇遊戲"></canvas>
+        <div class="overlay" id="overlay">
+          <div class="overlay-card">
+            <h1>遊戲結束</h1>
+            <div class="sub">碰到邊緣或咬到自己後會結束。</div>
+            <div class="metrics">
+              <div class="metric"><span>遊戲時間</span><strong id="finalTime">0.00 s</strong></div>
+              <div class="metric"><span>成功吃到的食物數量</span><strong id="finalScore">0</strong></div>
+            </div>
+            <div class="btn-row">
+              <button class="primary" id="restartBtn" type="button">重新開始</button>
+            </div>
+            <div class="help">控制：<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 或 <kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd></div>
+          </div>
+        </div>
+      </div>
+      <div class="help" style="padding-top: 2px; text-align:center;">
+        每吃 3 個食物會加速（移動速度逐步變快）。
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // -----------------------------
+    // Particle background
+    // -----------------------------
+    let spawnSparks = null;
+    (function initParticles(){
+      const c = document.getElementById('particles');
+      const ctx = c.getContext('2d', { alpha: true });
+      const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+
+      let w = 0, h = 0;
+      let particles = [];
+      let sparks = [];
+      let rafId = 0;
+
+      function resize(){
+        w = Math.floor(window.innerWidth);
+        h = Math.floor(window.innerHeight);
+        c.width = Math.floor(w * dpr);
+        c.height = Math.floor(h * dpr);
+        c.style.width = w + 'px';
+        c.style.height = h + 'px';
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+        // Density scales with screen size (more vivid, still responsive).
+        const count = Math.floor((w * h) / 12000);
+        const target = Math.max(140, Math.min(380, count));
+        particles = new Array(target).fill(0).map(() => {
+          const speed = 10 + Math.random() * 35;
+          const angle = Math.random() * Math.PI * 2;
+          return {
+            x: Math.random() * w,
+            y: Math.random() * h,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            r: 0.9 + Math.random() * 2.2,
+            a: 0.18 + Math.random() * 0.65
+          };
+        });
+      }
+
+      function spawnSparksImpl(sx, sy, n){
+        if (!Number.isFinite(sx) || !Number.isFinite(sy)) return;
+
+        // Cap to avoid runaway memory.
+        const cap = 240;
+        if (sparks.length > cap) sparks.splice(0, Math.max(0, sparks.length - cap));
+
+        const amount = Math.max(10, Math.min(90, n | 0));
+        const base = { r: 124, g: 247, b: 200 };
+        for (let i = 0; i < amount; i++){
+          const ang = Math.random() * Math.PI * 2;
+          const sp = 50 + Math.random() * 200;
+          const life = 380 + Math.random() * 520; // ms
+          sparks.push({
+            x: sx + (Math.random() - 0.5) * 6,
+            y: sy + (Math.random() - 0.5) * 6,
+            vx: Math.cos(ang) * sp,
+            vy: Math.sin(ang) * sp,
+            r: 1 + Math.random() * 2.8,
+            life,
+            age: 0,
+            cr: base.r + (Math.random() - 0.5) * 40,
+            cg: base.g + (Math.random() - 0.5) * 40,
+            cb: base.b + (Math.random() - 0.5) * 35,
+          });
+        }
+      }
+
+      function tick(ts){
+        const dt = (tick._last ? (ts - tick._last) : 16.7) / 1000;
+        tick._last = ts;
+        // Trail/fade for a more "alive" moving particle field.
+        ctx.fillStyle = 'rgba(5, 7, 13, 0.10)';
+        ctx.fillRect(0, 0, w, h);
+
+        // Draw particles and subtle connections
+        for (let i = 0; i < particles.length; i++){
+          const p = particles[i];
+          p.x += p.vx * dt;
+          p.y += p.vy * dt;
+
+          // Wrap around
+          if (p.x < -10) p.x = w + 10;
+          if (p.x > w + 10) p.x = -10;
+          if (p.y < -10) p.y = h + 10;
+          if (p.y > h + 10) p.y = -10;
+
+          ctx.globalCompositeOperation = 'lighter';
+          ctx.beginPath();
+          ctx.fillStyle = `rgba(124, 247, 200, ${p.a})`;
+          ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.globalCompositeOperation = 'source-over';
+        }
+
+        // Connections (sample few pairs for performance)
+        const maxPairs = Math.min(280, Math.floor(particles.length / 2));
+        for (let k = 0; k < maxPairs; k++){
+          const i = (Math.random() * particles.length) | 0;
+          const j = (Math.random() * particles.length) | 0;
+          if (i === j) continue;
+          const a = particles[i], b = particles[j];
+          const dx = a.x - b.x;
+          const dy = a.y - b.y;
+          const dist2 = dx*dx + dy*dy;
+          const limit = 140 * 140;
+          if (dist2 < limit){
+            const t = 1 - Math.sqrt(dist2) / 140;
+            ctx.strokeStyle = `rgba(124, 247, 200, ${0.07 + 0.32 * t})`;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(a.x, a.y);
+            ctx.lineTo(b.x, b.y);
+            ctx.stroke();
+          }
+        }
+
+        // Draw transient spark particles
+        if (sparks.length){
+          for (let i = sparks.length - 1; i >= 0; i--){
+            const s = sparks[i];
+            s.age += dt * 1000;
+            const t = Math.max(0, Math.min(1, s.age / s.life));
+
+            // Gravity-ish pull, slightly slows over time
+            s.vy += 35 * dt * (1 - t);
+            s.x += s.vx * dt;
+            s.y += s.vy * dt;
+
+            const alpha = (1 - t) * 0.95;
+            ctx.globalCompositeOperation = 'lighter';
+            ctx.fillStyle = `rgba(${s.cr|0}, ${s.cg|0}, ${s.cb|0}, ${alpha})`;
+            ctx.beginPath();
+            ctx.arc(s.x, s.y, s.r * (0.6 + (1 - t) * 0.9), 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalCompositeOperation = 'source-over';
+
+            if (t >= 1 || s.x < -80 || s.x > w + 80 || s.y < -80 || s.y > h + 80){
+              sparks.splice(i, 1);
+            }
+          }
+        }
+
+        rafId = requestAnimationFrame(tick);
+      }
+
+      window.addEventListener('resize', resize);
+      resize();
+      // Seed a clean slate so fade/tail starts from a clean frame.
+      ctx.fillStyle = 'rgba(5, 7, 13, 1)';
+      ctx.fillRect(0, 0, w, h);
+      rafId = requestAnimationFrame(tick);
+      // No cleanup needed for single-page demo.
+      spawnSparks = spawnSparksImpl;
+    })();
+
+    // -----------------------------
+    // Snake game (64x64 grid)
+    // -----------------------------
+    const GRID = 64;
+    const DIRS = {
+      up:    { x: 0, y: -1 },
+      down:  { x: 0, y: 1 },
+      left:  { x: -1, y: 0 },
+      right: { x: 1, y: 0 },
+    };
+
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+
+    const overlay = document.getElementById('overlay');
+    const restartBtn = document.getElementById('restartBtn');
+    const levelEl = document.getElementById('level');
+    const scoreEl = document.getElementById('score');
+    const finalTimeEl = document.getElementById('finalTime');
+    const finalScoreEl = document.getElementById('finalScore');
+
+    let cell = 10; // px per grid cell
+
+    function resizeGameCanvas(){
+      const maxSize = Math.floor(Math.min(window.innerWidth, window.innerHeight) * 0.82);
+      cell = Math.max(4, Math.floor(maxSize / GRID));
+      cell = Math.min(14, cell);
+      const px = cell * GRID;
+      canvas.width = px;
+      canvas.height = px;
+      canvas.style.width = px + 'px';
+      canvas.style.height = px + 'px';
+      ctx.imageSmoothingEnabled = false;
+    }
+    window.addEventListener('resize', () => { resizeGameCanvas(); render(); });
+    resizeGameCanvas();
+
+    // State
+    let running = false;
+    let snake = [];
+    let dir = DIRS.right;
+    let pendingDir = DIRS.right;
+    let food = { x: 10, y: 10 };
+    let score = 0;
+    let startTime = 0;
+    let endTime = 0;
+
+    // Speed control:
+    // - baseStepTime: lower is faster
+    // - every 3 foods increases speed by reducing step time
+    const baseStepTime = 145; // ms
+    const minStepTime = 60;  // ms
+    let stepTime = baseStepTime;
+
+    let accumulator = 0;
+    let lastFrameTs = 0;
+
+    function sameCell(a, b){
+      return a.x === b.x && a.y === b.y;
+    }
+
+    function randomEmptyCell(){
+      // Avoid expensive retries as snake grows (still fine for 64x64).
+      for (let tries = 0; tries < 2000; tries++){
+        const x = (Math.random() * GRID) | 0;
+        const y = (Math.random() * GRID) | 0;
+        const p = { x, y };
+        if (!snake.some(s => sameCell(s, p))) return p;
+      }
+      // Fallback: scan
+      const occupied = new Set(snake.map(s => s.x + ',' + s.y));
+      for (let y = 0; y < GRID; y++){
+        for (let x = 0; x < GRID; x++){
+          const k = x + ',' + y;
+          if (!occupied.has(k)) return { x, y };
+        }
+      }
+      // Should never happen unless snake fills the grid.
+      return { x: 0, y: 0 };
+    }
+
+    function startGame(){
+      running = true;
+      overlay.classList.remove('show');
+
+      // Reset snake
+      const cx = (GRID / 2) | 0;
+      const cy = (GRID / 2) | 0;
+      snake = [
+        { x: cx, y: cy },
+        { x: cx - 1, y: cy },
+        { x: cx - 2, y: cy },
+      ];
+      dir = DIRS.right;
+      pendingDir = DIRS.right;
+
+      score = 0;
+      levelEl.textContent = '1';
+      scoreEl.textContent = '0';
+
+      stepTime = baseStepTime;
+      accumulator = 0;
+      const now = performance.now();
+      startTime = now;
+      endTime = 0;
+      lastFrameTs = now;
+
+      food = randomEmptyCell();
+      render();
+    }
+
+    function gameOver(){
+      running = false;
+      endTime = performance.now();
+
+      const seconds = Math.max(0, (endTime - startTime) / 1000);
+      finalTimeEl.textContent = seconds.toFixed(2) + ' s';
+      finalScoreEl.textContent = String(score);
+      // Big particle burst on game over.
+      if (typeof spawnSparks === 'function'){
+        const rect = canvas.getBoundingClientRect();
+        const sx = rect.left + canvas.width / 2;
+        const sy = rect.top + canvas.height / 2;
+        spawnSparks(sx, sy, 110);
+      }
+      overlay.classList.add('show');
+    }
+
+    function wouldReverse(nextDir){
+      return (nextDir.x === -dir.x && nextDir.y === -dir.y);
+    }
+
+    function setDirection(nextDir){
+      if (!running) return;
+      if (wouldReverse(nextDir)) return;
+      pendingDir = nextDir;
+    }
+
+    window.addEventListener('keydown', (e) => {
+      const k = e.key;
+      const key = (k || '').toLowerCase();
+      const isArrow = key.startsWith('arrow');
+      if (isArrow) e.preventDefault();
+
+      // WASD
+      if (key === 'w' || key === 'arrowup') setDirection(DIRS.up);
+      else if (key === 's' || key === 'arrowdown') setDirection(DIRS.down);
+      else if (key === 'a' || key === 'arrowleft') setDirection(DIRS.left);
+      else if (key === 'd' || key === 'arrowright') setDirection(DIRS.right);
+      else if (key === 'r') {
+        // Convenience restart
+        e.preventDefault();
+        startGame();
+      }
+    }, { passive: false });
+
+    restartBtn.addEventListener('click', startGame);
+
+    function tick(){
+      dir = pendingDir;
+      const head = snake[0];
+      const newHead = { x: head.x + dir.x, y: head.y + dir.y };
+
+      // Collision: wall
+      if (newHead.x < 0 || newHead.x >= GRID || newHead.y < 0 || newHead.y >= GRID){
+        gameOver();
+        return;
+      }
+
+      // Collision: self
+      // Note: if we don't grow on this step, tail will move away.
+      // We handle it by temporarily excluding the last tail cell when not eating.
+      const willEat = sameCell(newHead, food);
+      const bodyToCheck = willEat ? snake : snake.slice(0, snake.length - 1);
+      if (bodyToCheck.some(s => sameCell(s, newHead))){
+        gameOver();
+        return;
+      }
+
+      snake.unshift(newHead);
+
+      if (willEat){
+        // Particle burst at the eaten-food position (screen coords).
+        if (typeof spawnSparks === 'function'){
+          const rect = canvas.getBoundingClientRect();
+          const sx = rect.left + food.x * cell + cell / 2;
+          const sy = rect.top + food.y * cell + cell / 2;
+          spawnSparks(sx, sy, 42);
+        }
+
+        score++;
+        const level = (score / 3) | 0; // each 3 foods -> +speed
+        levelEl.textContent = String(level + 1);
+
+        // Gradual speed up
+        // e.g. 0.. -> baseStepTime * 0.88^level, clamped
+        stepTime = Math.max(minStepTime, baseStepTime * Math.pow(0.88, level));
+        scoreEl.textContent = String(score);
+
+        food = randomEmptyCell();
+      } else {
+        snake.pop();
+      }
+    }
+
+    function drawCell(x, y, color, alpha){
+      ctx.globalAlpha = alpha == null ? 1 : alpha;
+      ctx.fillStyle = color;
+      ctx.fillRect(x * cell, y * cell, cell, cell);
+      ctx.globalAlpha = 1;
+    }
+
+    function render(){
+      // Background grid (very faint)
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.globalAlpha = 1;
+
+      // Optional faint grid for readability at 64x64
+      ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let i = 0; i <= GRID; i++){
+        const p = i * cell + 0.5;
+        ctx.moveTo(p, 0);
+        ctx.lineTo(p, canvas.height);
+        ctx.moveTo(0, p);
+        ctx.lineTo(canvas.width, p);
+      }
+      ctx.stroke();
+
+      // Food
+      const fx = food.x * cell;
+      const fy = food.y * cell;
+      const cx = fx + cell/2;
+      const cy = fy + cell/2;
+      const r = Math.max(2, cell * 0.33);
+
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = 'rgba(255, 88, 148, 0.95)';
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI*2);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255, 200, 220, 0.55)';
+      ctx.beginPath();
+      ctx.arc(cx, cy, r*0.6, 0, Math.PI*2);
+      ctx.fill();
+      ctx.restore();
+
+      // Snake
+      for (let i = 0; i < snake.length; i++){
+        const s = snake[i];
+        const t = i / Math.max(1, snake.length - 1);
+
+        // Body color gradient from head to tail
+        const rCol = Math.floor(80 + (124 - 80) * (1 - t));
+        const gCol = Math.floor(245 - 40 * t);
+        const bCol = Math.floor(200 - 30 * t);
+
+        const base = `rgb(${rCol},${gCol},${bCol})`;
+
+        // Slight inset
+        const pad = Math.max(1, Math.floor(cell * 0.12));
+        ctx.fillStyle = base;
+        ctx.fillRect(s.x*cell + pad, s.y*cell + pad, cell - pad*2, cell - pad*2);
+
+        // Head highlight
+        if (i === 0){
+          ctx.save();
+          ctx.globalCompositeOperation = 'lighter';
+          ctx.fillStyle = 'rgba(124, 247, 200, 0.45)';
+          ctx.fillRect(s.x*cell, s.y*cell, cell, cell);
+          ctx.restore();
+        }
+      }
+    }
+
+    function frame(ts){
+      if (running){
+        const now = ts;
+        let delta = now - lastFrameTs;
+        lastFrameTs = now;
+
+        // Clamp to avoid huge jumps when tab was inactive
+        delta = Math.max(0, Math.min(60, delta));
+        accumulator += delta;
+
+        // Execute discrete steps (variable stepTime due to acceleration)
+        while (running && accumulator >= stepTime){
+          accumulator -= stepTime;
+          tick();
+          render();
+        }
+      }
+      requestAnimationFrame(frame);
+    }
+
+    requestAnimationFrame(frame);
+    startGame();
+  </script>
+</body>
+</html>
+
